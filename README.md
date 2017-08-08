@@ -25,12 +25,12 @@ Usage is pretty easy:
 
 ```
 nagios-api -p 8080 -c /var/lib/nagios3/rw/nagios.cmd\
--s /var/cache/nagios3/status.dat -l /var/log/nagios3/nagios.log
+-s /var/cache/nagios3/status.dat -a /var/cache/nagios3/objects.cache -l /var/log/nagios3/nagios.log
 ```
 
 You must at least provide the status file options. If you don't provide
-the other options, then we will disable that functionality and error to
-clients who request it.
+the nagios.cmd or nagios.log, then we will disable that functionality and error to
+clients who request it. Objects.cache is needed for extra host parameters.
 
 ## Using the API
 The server speaks [JSON](http://www.json.org/). You can either GET data from it or POST data to
