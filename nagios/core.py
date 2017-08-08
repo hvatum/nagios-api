@@ -8,7 +8,7 @@ class Nagios:
     from the status file that Nagios maintains.
 
     '''
-    def __init__(self, statusfile=None):
+    def __init__(self, statusfile=None,objectfile=None):
         '''Create a new Nagios state store.  One argument, statusfile, is used to
         indicate where the status file is.  This object is intended to be read-only
         once it has been created.
@@ -22,6 +22,9 @@ class Nagios:
         self.downtimes = {}
         if statusfile is not None:
             self._update(statusfile)
+        if objectfile is not None:
+            self._updateobject(objectfile)
+
 
     def _update(self, statusfile):
         '''Read the status file from Nagios and parse it.  Responsible for building
@@ -63,6 +66,8 @@ class Nagios:
             if cur is not None:
                 yield cur
 
+
+
         f = open(statusfile, 'r')
         for obj in next_stanza(f):
             host = obj['host_name'] if 'host_name' in obj else None
@@ -96,6 +101,75 @@ class Nagios:
                 tmp.attach_comment(c)
         for d in self.downtimes.itervalues():
             self.host_or_service(d.host, d.service).attach_downtime(d)
+
+
+    def _updateobject(self, objectfile):
+
+        # Generator to get the next status stanza.
+        def next_stanza(f):
+            cur = None
+            for line in f:
+                line = line.strip()
+                if line.endswith('{'):
+                    if cur is not None:
+                        yield cur
+    		    if line.startswith('define'):
+                        cur = {'type': line.split(' ', 2)[1]}
+    		    else:
+                        cur = {'type': line.split(' ', 1)[0]}
+                elif "\t" in line and cur:
+                    key, val = line.split("\t", 1)
+                    val = val.strip()
+		    if key and val:
+                        cur[key] = val
+                elif ' ' in line and cur:
+                    key, val = line.split(' ', 1)
+                    val = val.strip()
+		    if key and val:
+                        cur[key] = val
+                elif "#" in line:
+                    if not line.find("NAGIOS STATE RETENTION FILE"):
+                        raise ValueError("You appear to have used the state retention file instead of the status file. Please change your arguments and try again.")
+            if cur is not None:
+                yield cur
+
+        f = open(objectfile, 'r')
+        for obj in next_stanza(f):
+	    if obj['type'] == 'host':
+		if 'address' in obj:
+	    	    self.hosts[obj['host_name']].address = obj['address']
+        f.close()
+
+
+    def host_or_service(self, host, service=None):
+        '''Return a Host or Service object for the given host/service combo.
+        Note that Service may be None, in which case we return a Host.
+
+        '''
+        if service is not None:
+            try:
+                service = service.encode('utf-8')
+            except:
+                pass
+        if host not in self.hosts:
+            return None
+        if service is None:  # Only a Host if they really want it.
+            return self.hosts[host]
+        if host not in self.services or service not in self.services[host]:
+            return None
+        return self.services[host][service]
+
+    def for_json(self):
+        '''Given a Nagios state object, return a pruned down dict that is
+        ready to be serialized to JSON.
+
+        '''
+        out = {}
+        for host in self.hosts:
+            out[host] = self.hosts[host].for_json()
+        return out
+
+
 
     def host_or_service(self, host, service=None):
         '''Return a Host or Service object for the given host/service combo.
@@ -245,6 +319,8 @@ class Host(HostOrService):
             obj[key] = {}
             for idx in self.__dict__[key]:
                 obj[key][idx] = self.__dict__[key][idx].for_json()
+	if self.address:
+	    obj['address'] = self.address
         return obj
 
 

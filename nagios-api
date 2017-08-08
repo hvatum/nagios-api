@@ -25,6 +25,7 @@ import atexit
 import urllib
 import pwd
 import grp
+import traceback
 from gzip import GzipFile
 from StringIO import StringIO
 from optparse import OptionParser
@@ -975,7 +976,7 @@ def send_nagios_command(*args):
     return True
 
 
-def read_status(statusfile):
+def read_status(statusfile, objectfile):
     '''Monitor the Nagios status file and update our global data store
     with the data as it changes.
 
@@ -991,8 +992,9 @@ def read_status(statusfile):
         stat = os.stat(statusfile)
         if mtime is None or stat.st_mtime > mtime:
             try:
-               NAGIOS = Nagios(statusfile)
+               NAGIOS = Nagios(statusfile, objectfile)
             except ValueError,e:
+		traceback.print_exc()
                 print "You appear to have handed me a malformed status file - possibly the state retention file. Please check your arguments and try again."
                 sys.exit(-1)
             mtime = stat.st_mtime
@@ -1053,6 +1055,9 @@ def main(argv):
     parser.add_option('-s', '--status-file', dest='statusfile', metavar='FILE',
             default='/var/cache/nagios3/status.dat', help='The file that contains '
             'the Nagios status.')
+    parser.add_option('-a', '--object-file', dest='objectfile', metavar='FILE',
+            default='/var/cache/nagios3/object.cache', help='The file that contains '
+            'the Nagios object cache.')
     parser.add_option('-c', '--command-file', dest='commandfile', metavar='FILE',
             default='/var/lib/nagios3/rw/nagios.cmd', help='The file to write '
             'Nagios commands to.')
@@ -1092,7 +1097,7 @@ def main(argv):
     log.info('Listening on port %d, starting to rock and roll!' % options.port)
     app.add_service(Service(http.HttpServer(http_handler), options.port,
             options.bind_addr))
-    app.add_loop(Loop(read_status, options.statusfile), keep_alive=True)
+    app.add_loop(Loop(read_status, options.statusfile, options.objectfile), keep_alive=True)
     if os.path.isfile(options.logfile):
         LOG_ENABLED = True
         app.add_loop(Loop(read_log, options.logfile), keep_alive=True)
